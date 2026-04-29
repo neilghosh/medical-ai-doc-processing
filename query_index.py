@@ -1,7 +1,7 @@
 import os
 from typing import List
 import requests
-from env_utils import load_env_file, resolve_endpoint, resolve_vision_key
+from dotenv import load_dotenv
 
 
 def create_search_client():
@@ -14,12 +14,9 @@ def create_search_client():
             "Missing Azure Search SDK. Install with: pip install azure-search-documents"
         ) from exc
 
-    search_endpoint = os.getenv("AZURE_SEARCH_ENDPOINT")
-    search_key = os.getenv("AZURE_SEARCH_QUERY_KEY") or os.getenv("AZURE_SEARCH_KEY")
-    index_name = os.getenv("AZURE_SEARCH_INDEX_NAME", "medical-images-index")
-
-    if not search_endpoint or not search_key:
-        raise ValueError("Missing AZURE_SEARCH_ENDPOINT and a key (AZURE_SEARCH_QUERY_KEY or AZURE_SEARCH_KEY).")
+    search_endpoint = os.environ["AZURE_SEARCH_ENDPOINT"]
+    search_key = os.environ["AZURE_SEARCH_QUERY_KEY"]
+    index_name = os.environ["AZURE_SEARCH_INDEX_NAME"]
 
     return SearchClient(
         endpoint=search_endpoint,
@@ -29,18 +26,8 @@ def create_search_client():
 
 
 def get_text_embedding(query_text: str) -> List[float]:
-    vision_endpoint = (
-        os.getenv("AZURE_VISION_ENDPOINT")
-        or os.getenv("AZURE_AI_SERVICES_ENDPOINT")
-        or resolve_endpoint()
-    )
-    vision_key = resolve_vision_key()
-
-    if not vision_endpoint or not vision_key:
-        raise ValueError(
-            "Missing vision settings for vector query. Set endpoint and key via AZURE_VISION_ENDPOINT/AZURE_VISION_KEY "
-            "or their fallbacks."
-        )
+    vision_endpoint = os.environ["ENDPOINT_URL"]
+    vision_key = os.environ["AZURE_OPENAI_API_KEY"]
 
     url = f"{vision_endpoint.rstrip('/')}/computervision/retrieval:vectorizeText"
     headers = {
@@ -61,7 +48,7 @@ def get_text_embedding(query_text: str) -> List[float]:
 
 
 def main() -> None:
-    load_env_file(".env")
+    load_dotenv()
     search_client, VectorizedQuery = create_search_client()
 
     query_text = "Find the report with HBA1C"

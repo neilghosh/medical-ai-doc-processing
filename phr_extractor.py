@@ -5,23 +5,7 @@ from typing import Optional
 
 from openai import AzureOpenAI
 from pydantic import BaseModel, Field, ValidationError
-
-
-def load_env_file(env_path: str = ".env") -> None:
-    """Load .env key-value pairs into process env if not already set."""
-    if not os.path.exists(env_path):
-        return
-
-    with open(env_path, "r", encoding="utf-8") as env_file:
-        for raw_line in env_file:
-            line = raw_line.strip()
-            if not line or line.startswith("#") or "=" not in line:
-                continue
-
-            key, value = line.split("=", 1)
-            key = key.strip()
-            value = value.strip().strip('"').strip("'")
-            os.environ.setdefault(key, value)
+from dotenv import load_dotenv
 
 
 class PHRRecord(BaseModel):
@@ -64,13 +48,18 @@ def parse_json_content(raw_content: str) -> dict:
 
 
 def main() -> None:
-    load_env_file(".env")
+    load_dotenv()
 
-    endpoint = os.getenv("ENDPOINT_URL", "https://medical-document-processing.cognitiveservices.azure.com/")
-    deployment = os.getenv("DEPLOYMENT_NAME", "gpt-4o")
-    subscription_key = os.getenv("AZURE_OPENAI_API_KEY", "REPLACE_WITH_YOUR_KEY_VALUE_HERE")
+    endpoint = os.getenv("ENDPOINT_URL")
+    deployment = os.getenv("DEPLOYMENT_NAME")
+    subscription_key = os.getenv("AZURE_OPENAI_API_KEY")
+    image_path = os.getenv("LAB_IMAGE_PATH")
 
-    image_path = os.getenv("LAB_IMAGE_PATH", "data/report1.jpg")
+    if not endpoint or not deployment or not subscription_key or not image_path:
+        raise ValueError(
+            "Missing required env vars: ENDPOINT_URL, DEPLOYMENT_NAME, AZURE_OPENAI_API_KEY, LAB_IMAGE_PATH"
+        )
+
     if not os.path.exists(image_path):
         raise FileNotFoundError(f"Image not found: {image_path}")
 

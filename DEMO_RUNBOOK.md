@@ -2,23 +2,21 @@
 
 This is a simple, stage-friendly runbook from a fresh VS Code launch to a full agentic architecture story.
 
-## 1. Launch and Setup (2-3 minutes)
+## 1. Launch and Setup (1 minute)
 
-1. Open the project in VS Code.
-2. Open terminal in project root.
-3. Install dependencies:
+1. Open the project in VS Code and open a terminal in the project root.
+2. Ensure `.env` exists with these keys (no fallback defaults in scripts):
+   - `ENDPOINT_URL`, `DEPLOYMENT_NAME`, `AZURE_OPENAI_API_KEY`
+   - `AZURE_SEARCH_ENDPOINT`, `AZURE_SEARCH_KEY`, `AZURE_SEARCH_QUERY_KEY`, `AZURE_SEARCH_INDEX_NAME`
+   - `DATA_FOLDER`, `LAB_IMAGE_PATH`
+3. Run the one-shot bootstrap (creates venv, installs deps, validates env):
 
 ```bash
-pip install -r requirements.txt
+./install.sh
+source .venv/bin/activate
 ```
 
-4. Check `.env` contains at least:
-- `ENDPOINT_URL`
-- `DEPLOYMENT_NAME`
-- `AZURE_OPENAI_API_KEY`
-- `AZURE_SEARCH_ENDPOINT`
-- `AZURE_SEARCH_KEY`
-- `AZURE_SEARCH_QUERY_KEY`
+   Optional: Command Palette → "Python: Select Interpreter" → choose `.venv/bin/python` so VS Code uses the same env.
 
 ## 2. Generic Model Call Baseline (Step 0)
 

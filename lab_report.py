@@ -1,7 +1,7 @@
 import os
 import base64
 from openai import AzureOpenAI
-from env_utils import load_env_file, resolve_endpoint, resolve_openai_key
+from dotenv import load_dotenv
 
 # 1. Helper function to encode the local image to Base64
 def encode_image(image_path):
@@ -9,11 +9,11 @@ def encode_image(image_path):
         return base64.b64encode(image_file.read()).decode('utf-8')
 
 # 2. Initialize the Azure Client
-load_env_file(".env")
+load_dotenv()
 
-endpoint = resolve_endpoint()
-deployment = os.getenv("DEPLOYMENT_NAME", "gpt-4o")
-subscription_key = resolve_openai_key("REPLACE_WITH_YOUR_KEY_VALUE_HERE")
+endpoint = os.environ["ENDPOINT_URL"]
+deployment = os.environ["DEPLOYMENT_NAME"]
+subscription_key = os.environ["AZURE_OPENAI_API_KEY"]
 
 client = AzureOpenAI(
     azure_endpoint=endpoint,

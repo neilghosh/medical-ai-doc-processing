@@ -2,10 +2,16 @@
 import os
 import base64
 from openai import AzureOpenAI
+from dotenv import load_dotenv
 
-endpoint = os.getenv("ENDPOINT_URL", "https://medical-document-processing.cognitiveservices.azure.com/")
-deployment = os.getenv("DEPLOYMENT_NAME", "gpt-4o")
-subscription_key = os.getenv("AZURE_OPENAI_API_KEY", "REPLACE_WITH_YOUR_KEY_VALUE_HERE")
+load_dotenv()
+
+endpoint = os.getenv("ENDPOINT_URL")
+deployment = os.getenv("DEPLOYMENT_NAME")
+subscription_key = os.getenv("AZURE_OPENAI_API_KEY")
+
+if not endpoint or not deployment or not subscription_key:
+    raise ValueError("Missing required env vars: ENDPOINT_URL, DEPLOYMENT_NAME, AZURE_OPENAI_API_KEY")
 
 # Initialize Azure OpenAI client with key-based authentication
 client = AzureOpenAI(

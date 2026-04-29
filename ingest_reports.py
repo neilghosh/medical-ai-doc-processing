@@ -3,39 +3,17 @@ import glob
 import hashlib
 import requests
 from pathlib import Path
-from env_utils import load_env_file, resolve_endpoint, resolve_vision_key
+from dotenv import load_dotenv
 
 # --- Configuration ---
-load_env_file(".env")
+load_dotenv()
 
-# Prefer explicit Vision settings, then fall back to current Foundry/AI service endpoint+key names.
-VISION_ENDPOINT = (
-    os.getenv("AZURE_VISION_ENDPOINT")
-    or os.getenv("AZURE_AI_SERVICES_ENDPOINT")
-    or resolve_endpoint()
-)
-VISION_KEY = resolve_vision_key()
-
-SEARCH_ENDPOINT = os.getenv("AZURE_SEARCH_ENDPOINT")
-SEARCH_KEY = os.getenv("AZURE_SEARCH_KEY")
-INDEX_NAME = os.getenv("AZURE_SEARCH_INDEX_NAME", "medical-images-index")
-DATA_FOLDER = os.getenv("DATA_FOLDER", "data")
-
-if not VISION_ENDPOINT:
-    raise ValueError(
-        "Missing vision endpoint. Set one of: AZURE_VISION_ENDPOINT, AZURE_AI_SERVICES_ENDPOINT, "
-        "ENDPOINT_URL, or AZURE_EXISTING_AIPROJECT_ENDPOINT."
-    )
-
-if not VISION_KEY:
-    raise ValueError(
-        "Missing vision key. Set one of: AZURE_VISION_KEY, AZURE_AI_SERVICES_KEY, or AZURE_OPENAI_API_KEY."
-    )
-
-if not SEARCH_ENDPOINT or not SEARCH_KEY:
-    raise ValueError(
-        "Missing Azure AI Search settings. Set AZURE_SEARCH_ENDPOINT and AZURE_SEARCH_KEY."
-    )
+VISION_ENDPOINT = os.environ["ENDPOINT_URL"]
+VISION_KEY = os.environ["AZURE_OPENAI_API_KEY"]
+SEARCH_ENDPOINT = os.environ["AZURE_SEARCH_ENDPOINT"]
+SEARCH_KEY = os.environ["AZURE_SEARCH_KEY"]
+INDEX_NAME = os.environ["AZURE_SEARCH_INDEX_NAME"]
+DATA_FOLDER = os.environ["DATA_FOLDER"]
 
 # Initialize the Search Client
 def create_search_client():
