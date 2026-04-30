@@ -21,9 +21,6 @@ from pydantic import BaseModel, Field
 
 load_dotenv()
 
-from scripts.ingest_reports import ingest  # noqa: E402
-from scripts.phr_extractor import explain, extract  # noqa: E402
-from scripts.query_index import search  # noqa: E402
 from api.images import materialize_image  # noqa: E402
 from api.run_loop import latest_assistant_text, run_thread  # noqa: E402
 
@@ -69,6 +66,11 @@ class ChatRequest(BaseModel):
 # ---------------------------------------------------------------------------
 # Health
 # ---------------------------------------------------------------------------
+@app.get("/")
+def root() -> dict:
+    return {"status": "ok", "service": "Lab2PHR Agents API"}
+
+
 @app.get("/healthz")
 def healthz() -> dict:
     return {"status": "ok"}
@@ -82,6 +84,11 @@ async def ingest_endpoint(
     file: Optional[UploadFile] = File(default=None),
     image_url: Optional[str] = Form(default=None),
 ) -> dict:
+    try:
+        from scripts.ingest_reports import ingest
+    except KeyError as exc:
+        raise HTTPException(status_code=503, detail=f"Missing environment variable: {exc.args[0]}")
+
     path = await materialize_image(file=file, image_url=image_url)
     return await run_in_threadpool(ingest, path)
 
@@ -91,6 +98,11 @@ async def ingest_endpoint(
 # ---------------------------------------------------------------------------
 @app.post("/agents/query", dependencies=[Depends(require_api_key)])
 async def query_endpoint(req: QueryRequest) -> dict:
+    try:
+        from scripts.query_index import search
+    except KeyError as exc:
+        raise HTTPException(status_code=503, detail=f"Missing environment variable: {exc.args[0]}")
+
     matches = await run_in_threadpool(search, req.query, req.k)
     return {"query": req.query, "matches": matches}
 
@@ -103,6 +115,11 @@ async def phr_endpoint(
     file: Optional[UploadFile] = File(default=None),
     image_url: Optional[str] = Form(default=None),
 ) -> dict:
+    try:
+        from scripts.phr_extractor import explain, extract
+    except KeyError as exc:
+        raise HTTPException(status_code=503, detail=f"Missing environment variable: {exc.args[0]}")
+
     path = await materialize_image(file=file, image_url=image_url)
     record = await run_in_threadpool(extract, path)
     explanation = await run_in_threadpool(explain, record)
@@ -114,6 +131,13 @@ async def phr_endpoint(
 # ---------------------------------------------------------------------------
 @app.post("/agents/chat", dependencies=[Depends(require_api_key)])
 async def chat_endpoint(req: ChatRequest) -> dict:
+    try:
+        from scripts.ingest_reports import ingest
+        from scripts.query_index import search
+        from scripts.phr_extractor import explain, extract
+    except KeyError as exc:
+        raise HTTPException(status_code=503, detail=f"Missing environment variable: {exc.args[0]}")
+
     agent_id = os.environ.get("ORCHESTRATOR_AGENT_ID")
     if not agent_id:
         raise HTTPException(

@@ -7,7 +7,11 @@ import base64
 import json
 import os
 from typing import Optional
+from urllib.parse import urlparse
 
+import requests
+from azure.identity import DefaultAzureCredential
+from azure.storage.blob import BlobClient
 from dotenv import load_dotenv
 from openai import AzureOpenAI
 from pydantic import BaseModel, Field
@@ -56,9 +60,34 @@ def _strip_fences(text: str) -> str:
     return text
 
 
+def _read_image_bytes(image_path: str) -> bytes:
+    if image_path.startswith(("http://", "https://")):
+        http_err: Optional[Exception] = None
+        try:
+            resp = requests.get(image_path, timeout=30)
+            resp.raise_for_status()
+            return resp.content
+        except Exception as exc:
+            http_err = exc
+
+        # For private blobs, fall back to Entra-authenticated blob download.
+        parsed = urlparse(image_path)
+        if parsed.netloc.endswith(".blob.core.windows.net"):
+            try:
+                blob = BlobClient.from_blob_url(image_path, credential=DefaultAzureCredential())
+                return blob.download_blob().readall()
+            except Exception as blob_exc:
+                raise RuntimeError(f"Failed to read blob URL: {image_path}") from blob_exc
+
+        raise RuntimeError(f"Failed to download URL: {image_path}") from http_err
+
+    with open(image_path, "rb") as f:
+        return f.read()
+
+
 def extract(image_path: str) -> dict:
     """Run GPT-4o vision on a lab-report image; return a validated PHRRecord dict."""
-    b64 = base64.b64encode(open(image_path, "rb").read()).decode()
+    b64 = base64.b64encode(_read_image_bytes(image_path)).decode()
     resp = _client.chat.completions.create(
         model=_DEPLOYMENT,
         messages=[{

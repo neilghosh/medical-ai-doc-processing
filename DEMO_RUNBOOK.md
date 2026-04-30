@@ -140,7 +140,7 @@ python -m agents.chat
 uvicorn api.main:app --reload --port 8000
 
 # 5. Public URL on Azure Container Apps
-RG=lab2phr-rg LOCATION=eastus2 ACR_NAME=lab2phracr$RANDOM \
+RG=med-doc LOCATION=eastus ACR_NAME=lab2phracr \
 ACA_ENV=lab2phr-env APP_NAME=lab2phr-api \
 ./infra/deploy.sh
 # -> https://<app>.<region>.azurecontainerapps.io/docs
