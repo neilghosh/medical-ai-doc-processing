@@ -17,6 +17,12 @@ VISION_ENDPOINT = os.environ["ENDPOINT_URL"]
 VISION_KEY = os.environ["AZURE_OPENAI_API_KEY"]
 
 
+def _doc_id(path: Path) -> str:
+    """Stable key for local files so re-ingest updates, not duplicates."""
+    canonical = path.expanduser().resolve().as_posix().lower()
+    return hashlib.sha1(canonical.encode("utf-8")).hexdigest()
+
+
 def _embed_image(image_path: str) -> list[float]:
     """Call Azure AI Vision for a 1024-dim multimodal vector."""
     url = f"{VISION_ENDPOINT.rstrip('/')}/computervision/retrieval:vectorizeImage"
@@ -39,6 +45,7 @@ def ingest(path: str) -> dict:
     if target.is_dir():
         files = [p for ext in ("jpg", "jpeg", "png", "JPG", "JPEG", "PNG")
                  for p in target.rglob(f"*.{ext}")]
+        files.sort(key=lambda p: p.as_posix().lower())
     else:
         files = [target]
 
@@ -46,8 +53,8 @@ def ingest(path: str) -> dict:
     for f in files:
         print(f"Embedding {f.name}...")
         docs.append({
-            "id": hashlib.sha1(str(f).encode()).hexdigest(),
-            "file_path": str(f),
+            "id": _doc_id(f),
+            "file_path": str(f.expanduser().resolve()),
             "image_vector": _embed_image(str(f)),
         })
 
@@ -63,4 +70,6 @@ def ingest(path: str) -> dict:
 
 
 if __name__ == "__main__":
-    ingest(os.environ["SAMPLE_DATA_FOLDER"])
+    index_name = os.environ.get("AZURE_SEARCH_INDEX_NAME", "").lower()
+    folder = os.environ["DATA_FOLDER"] if "blob" in index_name else os.environ["SAMPLE_DATA_FOLDER"]
+    ingest(folder)

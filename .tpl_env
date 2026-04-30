@@ -1,0 +1,21 @@
+AZURE_ENV_NAME="chat-playground-6116"
+AZURE_LOCATION="eastus"
+AZURE_SUBSCRIPTION_ID="2dfe4d22-c863-423e-b8c1-d4665a1593ff"
+AZURE_EXISTING_AIPROJECT_RESOURCE_ID="/subscriptions/2dfe4d22-c863-423e-b8c1-d4665a1593ff/resourceGroups/med-doc/providers/Microsoft.CognitiveServices/accounts/Medical-Document-Processing/projects/Lab2Phr"
+AZD_ALLOW_NON_EMPTY_FOLDER=true
+
+# Core model settings
+AZURE_AI_PROJECT_ENDPOINT="https://medical-document-processing.services.ai.azure.com/api/projects/Lab2Phr"
+ENDPOINT_URL="https://medical-document-processing.cognitiveservices.azure.com/"
+DEPLOYMENT_NAME="gpt-4o"
+
+# Search settings
+AZURE_SEARCH_ENDPOINT="https://med-lab-db.search.windows.net"
+AZURE_SEARCH_INDEX_NAME="medical-images-index"
+
+# Local data paths
+DATA_FOLDER="data"
+SAMPLE_DATA_FOLDER="sampledata"
+
+LAB_IMAGE_PATH="sampledata/report1.jpg"
+ORCHESTRATOR_AGENT_ID=asst_tnLk3a34zrYb0eFInegtYdc6

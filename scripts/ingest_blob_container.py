@@ -5,10 +5,10 @@ Keeps the existing local index untouched. Index is auto-created if missing.
 Env (in .env or shell):
   AZURE_SEARCH_ENDPOINT         (required)
   AZURE_SEARCH_KEY              (required, admin key)
+    AZURE_SEARCH_INDEX_NAME       (required; target index)
   ENDPOINT_URL                  (Cognitive Services / Vision endpoint)
   AZURE_OPENAI_API_KEY          (used as Vision key in this repo)
   BLOB_CONTAINER_URL            (default: https://meddocsraw.blob.core.windows.net/data)
-  BLOB_INDEX_NAME               (default: medical-images-blob-index)
   BLOB_SAS_TOKEN                (optional; if container is private, paste a SAS like "?sv=...&sig=...")
 
 Run:
@@ -46,7 +46,7 @@ SEARCH_KEY = os.environ["AZURE_SEARCH_KEY"]
 CONTAINER_URL = os.environ.get(
     "BLOB_CONTAINER_URL", "https://meddocsraw.blob.core.windows.net/data"
 )
-INDEX_NAME = os.environ.get("BLOB_INDEX_NAME", "medical-images-blob-index")
+INDEX_NAME = os.environ["AZURE_SEARCH_INDEX_NAME"]
 SAS_TOKEN = os.environ.get("BLOB_SAS_TOKEN", "").strip()
 
 IMAGE_EXT = (".jpg", ".jpeg", ".png")
@@ -113,7 +113,11 @@ def _iter_image_blobs(container: ContainerClient) -> Iterable[str]:
             yield name
 
 
-def main() -> None:
+def ingest(_path: str = "") -> dict:
+    """Ingest all eligible images from configured blob container into blob index.
+
+    `_path` is accepted for tool signature compatibility with local ingest.
+    """
     _ensure_index()
     container = _container_client()
     search = SearchClient(SEARCH_ENDPOINT, INDEX_NAME, AzureKeyCredential(SEARCH_KEY))
@@ -145,6 +149,11 @@ def main() -> None:
         total += len(docs)
 
     print(f"\n✅ Uploaded {total} documents into index '{INDEX_NAME}'.")
+    return {"uploaded": total, "index": INDEX_NAME, "container": CONTAINER_URL}
+
+
+def main() -> None:
+    ingest("")
 
 
 if __name__ == "__main__":
