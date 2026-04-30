@@ -70,6 +70,14 @@ python query_index.py
 Talk track:
 - "This query is vector-based, so it can find relevant charts even when filenames do not contain exact keywords."
 
+### Speaker Notes: Why Similar Reports Appear
+
+- Current retrieval is vector-only (`search_text=None` with `image_vector` k-NN), so the system always returns nearest neighbors.
+- `@search.score` here is similarity, not exact keyword containment; close scores are normal when reports look structurally similar.
+- Temperature is not involved in retrieval ranking. This is index/query design behavior.
+- In larger corpora, vector-only search finds semantically similar reports (layout + clinical context), but can miss exact acronym precision.
+- For exact term guarantees like `HBA1C`, add OCR text to the index and run hybrid search (text + vector), optionally with score thresholds.
+
 ## 6. Architecture Story for Q&A
 
 Use this model split:
