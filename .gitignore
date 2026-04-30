@@ -83,3 +83,4 @@ Desktop.ini
 ## Node (just in case mixed project)
 node_modules/
 # End
+data

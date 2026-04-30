@@ -102,3 +102,58 @@ Suggested split:
 3. Verify index exists and query key works.
 4. Keep one fallback command visible in notes for each step.
 5. Rotate keys after the event.
+
+## 9. Agentic Version (Foundry agent + FastAPI)
+
+A single OrchestratorAgent owns all four tools. The same agent definition runs
+locally and in Foundry — the SDK's `runs.create_and_process` automatically
+executes the FunctionTools in the caller's process.
+
+- `scripts.ingest_reports.ingest(path)` → tool
+- `scripts.query_index.search(query, k)` → tool
+- `scripts.phr_extractor.extract(image)` / `.explain(record)` → tools
+
+Demo flow:
+
+```bash
+# Step 0/1 baselines
+python -m scripts.run_model
+python -m scripts.lab_report
+
+# Capability scripts (also runnable standalone)
+python -m scripts.ingest_reports
+python -m scripts.query_index
+python -m scripts.phr_extractor
+
+# 1. Same scripts, run as a sequential pipeline
+python -m agents.pipeline --image data/report1.jpg --query "platelet count"
+
+# 2. Create the OrchestratorAgent in Foundry
+#    Requires AZURE_AI_PROJECT_ENDPOINT in .env and `az login`.
+python -m agents.bootstrap_agents
+# copy the printed ORCHESTRATOR_AGENT_ID into .env
+
+# 3. Chat with the orchestrator (it picks the right tool per turn)
+python -m agents.chat
+
+# 4. HTTP surface (Swagger at /docs)
+uvicorn api.main:app --reload --port 8000
+
+# 5. Public URL on Azure Container Apps
+RG=lab2phr-rg LOCATION=eastus2 ACR_NAME=lab2phracr$RANDOM \
+ACA_ENV=lab2phr-env APP_NAME=lab2phr-api \
+./infra/deploy.sh
+# -> https://<app>.<region>.azurecontainerapps.io/docs
+```
+
+### Housekeeping (optional, one-time)
+
+After the move, the original top-level files are now thin re-export shims that
+just forward to `scripts.*`. Delete them when convenient:
+
+```bash
+rm ingest_reports.py query_index.py phr_extractor.py lab_report.py run_model.py
+rm agents/core/vision.py agents/core/phr_schema.py
+chmod +x infra/deploy.sh
+```
+

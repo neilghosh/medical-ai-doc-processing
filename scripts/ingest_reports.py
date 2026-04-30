@@ -1,0 +1,66 @@
+"""Embed report images with Azure AI Vision and upsert into Azure AI Search.
+
+Public function `ingest(path)` is also used as the IngestAgent's tool.
+"""
+import hashlib
+import os
+from pathlib import Path
+
+import requests
+from azure.core.credentials import AzureKeyCredential
+from azure.search.documents import SearchClient
+from dotenv import load_dotenv
+
+load_dotenv()
+
+VISION_ENDPOINT = os.environ["ENDPOINT_URL"]
+VISION_KEY = os.environ["AZURE_OPENAI_API_KEY"]
+
+
+def _embed_image(image_path: str) -> list[float]:
+    """Call Azure AI Vision for a 1024-dim multimodal vector."""
+    url = f"{VISION_ENDPOINT.rstrip('/')}/computervision/retrieval:vectorizeImage"
+    with open(image_path, "rb") as f:
+        resp = requests.post(
+            url,
+            headers={"Ocp-Apim-Subscription-Key": VISION_KEY,
+                     "Content-Type": "application/octet-stream"},
+            params={"api-version": "2024-02-01", "model-version": "2023-04-15"},
+            data=f.read(),
+            timeout=60,
+        )
+    resp.raise_for_status()
+    return resp.json()["vector"]
+
+
+def ingest(path: str) -> dict:
+    """Embed an image (or every image under a folder) and upsert into the search index."""
+    target = Path(path)
+    if target.is_dir():
+        files = [p for ext in ("jpg", "jpeg", "png", "JPG", "JPEG", "PNG")
+                 for p in target.rglob(f"*.{ext}")]
+    else:
+        files = [target]
+
+    docs = []
+    for f in files:
+        print(f"Embedding {f.name}...")
+        docs.append({
+            "id": hashlib.sha1(str(f).encode()).hexdigest(),
+            "file_path": str(f),
+            "image_vector": _embed_image(str(f)),
+        })
+
+    if docs:
+        client = SearchClient(
+            os.environ["AZURE_SEARCH_ENDPOINT"],
+            os.environ["AZURE_SEARCH_INDEX_NAME"],
+            AzureKeyCredential(os.environ["AZURE_SEARCH_KEY"]),
+        )
+        client.upload_documents(documents=docs)
+    print(f"✅ Uploaded {len(docs)} document(s).")
+    return {"uploaded": len(docs), "ids": [d["id"] for d in docs]}
+
+
+if __name__ == "__main__":
+    ingest(os.environ["SAMPLE_DATA_FOLDER"])
