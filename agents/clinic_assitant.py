@@ -7,12 +7,19 @@ thread is created; pass --thread <id> to continue an existing conversation.
     python -m agents.clinic_assitant --thread thread_abc123 "and the WBC?"
 """
 import argparse
+import logging
 import os
 
 from dotenv import load_dotenv
 from azure.ai.agents.models import FunctionTool, ToolSet
 from azure.ai.projects import AIProjectClient
 from azure.identity import DefaultAzureCredential
+
+# Demo: always dump raw agent/thread/run HTTP traffic to stdout.
+logging.basicConfig(level=logging.DEBUG)
+logging.getLogger(
+    "azure.core.pipeline.policies.http_logging_policy"
+).setLevel(logging.DEBUG)
 
 from scripts.ingest_reports import ingest
 from scripts.phr_extractor import explain, extract
@@ -40,6 +47,7 @@ def build_clinic_assistant():
     project = AIProjectClient(
         endpoint=os.environ["AZURE_AI_PROJECT_ENDPOINT"],
         credential=DefaultAzureCredential(),
+        logging_enable=True,
     )
     agents = project.agents
 

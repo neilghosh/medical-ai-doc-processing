@@ -34,7 +34,7 @@ def search(query: str, k: int = 5) -> list[dict]:
     client = SearchClient(
         os.environ["AZURE_SEARCH_ENDPOINT"],
         os.environ["AZURE_SEARCH_INDEX_NAME"],
-        AzureKeyCredential(os.environ["AZURE_SEARCH_QUERY_KEY"]),
+        AzureKeyCredential(os.environ.get("AZURE_SEARCH_QUERY_KEY") or os.environ["AZURE_SEARCH_KEY"]),
     )
     vq = VectorizedQuery(vector=_embed_text(query), k_nearest_neighbors=k, fields="image_vector")
     results = client.search(search_text=None, vector_queries=[vq], top=k, select=["id", "file_path"])
