@@ -8,7 +8,7 @@ Env (in .env or shell):
     AZURE_SEARCH_INDEX_NAME       (required; target index)
   ENDPOINT_URL                  (Cognitive Services / Vision endpoint)
   AZURE_OPENAI_API_KEY          (used as Vision key in this repo)
-  BLOB_CONTAINER_URL            (default: https://meddocsraw.blob.core.windows.net/data)
+  BLOB_CONTAINER_URL            (required; e.g. https://<acct>.blob.core.windows.net/<container>)
   BLOB_SAS_TOKEN                (optional; if container is private, paste a SAS like "?sv=...&sig=...")
 
 Run:
@@ -43,9 +43,7 @@ VISION_KEY = os.environ["AZURE_OPENAI_API_KEY"]
 SEARCH_ENDPOINT = os.environ["AZURE_SEARCH_ENDPOINT"]
 SEARCH_KEY = os.environ["AZURE_SEARCH_KEY"]
 
-CONTAINER_URL = os.environ.get(
-    "BLOB_CONTAINER_URL", "https://meddocsraw.blob.core.windows.net/data"
-)
+CONTAINER_URL = os.environ["BLOB_CONTAINER_URL"]
 INDEX_NAME = os.environ["AZURE_SEARCH_INDEX_NAME"]
 SAS_TOKEN = os.environ.get("BLOB_SAS_TOKEN", "").strip()
 

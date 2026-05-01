@@ -77,11 +77,12 @@ az role assignment create --assignee-object-id "$PID" --assignee-principal-type 
 4. Grant the Container App managed identity access to the Azure AI Project.
    In Azure Portal, open project `Lab2Phr` and assign role `Azure AI Developer` to managed identity `lab2phr-api`.
 
-5. Grant the Container App managed identity access to Blob storage (required so chat tools can read files by blob URL):
+5. Grant the Container App managed identity access to Blob storage (required so chat tools can read files by blob URL). The storage account name is the host of `BLOB_CONTAINER_URL` in `.env` (written by `infra/bootstrap.sh`):
 
 ```bash
 PID=$(az containerapp identity show -g med-doc -n lab2phr-api --query principalId -o tsv)
-STORAGE_SCOPE="/subscriptions/2dfe4d22-c863-423e-b8c1-d4665a1593ff/resourceGroups/med-doc/providers/Microsoft.Storage/storageAccounts/meddocsraw"
+STORAGE_ACCOUNT=$(awk -F[/.] '/^BLOB_CONTAINER_URL=/{print $4}' .env)
+STORAGE_SCOPE=$(az storage account show -g med-doc -n "$STORAGE_ACCOUNT" --query id -o tsv)
 az role assignment create --assignee-object-id "$PID" --assignee-principal-type ServicePrincipal --role "Storage Blob Data Reader" --scope "$STORAGE_SCOPE"
 ```
 

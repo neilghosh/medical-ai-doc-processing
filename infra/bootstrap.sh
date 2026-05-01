@@ -19,8 +19,10 @@
 #   FOUNDRY_PROJECT         Foundry project name under that account
 #   SEARCH_SERVICE          Search service name
 #   OPENAI_DEPLOYMENT       Model deployment name (else first one is used)
-#   SEARCH_INDEX_NAME       Defaults to "lab-reports"
+#   SEARCH_INDEX_NAME       Defaults to "medical-images-index"
 #   AGENT_MODEL_DEPLOYMENT  Defaults to OPENAI_DEPLOYMENT
+#   STORAGE_ACCOUNT         Storage account name (else picked from RG if unique)
+#   BLOB_CONTAINER          Blob container name (else picked from account if unique)
 #   PUSH_CODESPACES=1       Also push values via `gh secret set --app codespaces`
 #   GH_REPO=owner/repo      Required if PUSH_CODESPACES=1
 set -euo pipefail
@@ -71,10 +73,12 @@ PROJECTS_JSON=$(az rest --method get \
   -o json 2>/dev/null || echo '{"value":[]}')
 PROJECT_NAMES=$(echo "$PROJECTS_JSON" | python3 -c 'import json,sys;print("\n".join(p["name"] for p in json.load(sys.stdin).get("value",[])))')
 FOUNDRY_PROJECT=$(pick_one "Foundry project" "${FOUNDRY_PROJECT:-}" echo "$PROJECT_NAMES")
+FOUNDRY_PROJECT="${FOUNDRY_PROJECT##*/}"   # strip any "account/" prefix
 echo "    project: $FOUNDRY_PROJECT"
 
-HOST=$(echo "$ENDPOINT_URL" | sed -E 's#^https?://([^/]+).*#\1#')
-FOUNDRY_PROJECT_ENDPOINT="https://${HOST}/api/projects/${FOUNDRY_PROJECT}"
+# Foundry project endpoint must use the `services.ai.azure.com` host, not the
+# account's `cognitiveservices.azure.com` endpoint.
+FOUNDRY_PROJECT_ENDPOINT="https://$(echo "$FOUNDRY_ACCOUNT" | tr '[:upper:]' '[:lower:]').services.ai.azure.com/api/projects/${FOUNDRY_PROJECT}"
 
 echo "==> Discovering AI Search service"
 SEARCH_SERVICE=$(pick_one "Search service" "${SEARCH_SERVICE:-}" \
@@ -87,8 +91,18 @@ AZURE_SEARCH_KEY=$(az search admin-key show \
 AZURE_SEARCH_QUERY_KEY=$(az search query-key list \
   -g "$RG" --service-name "$SEARCH_SERVICE" --query "[0].key" -o tsv)
 
-SEARCH_INDEX_NAME="${SEARCH_INDEX_NAME:-lab-reports}"
+SEARCH_INDEX_NAME="${SEARCH_INDEX_NAME:-medical-images-index}"
 AGENT_MODEL_DEPLOYMENT="${AGENT_MODEL_DEPLOYMENT:-$OPENAI_DEPLOYMENT}"
+
+echo "==> Discovering Storage account"
+STORAGE_ACCOUNT=$(pick_one "Storage account" "${STORAGE_ACCOUNT:-}" \
+  az storage account list -g "$RG" --query "[].name" -o tsv)
+echo "    storage: $STORAGE_ACCOUNT"
+
+BLOB_CONTAINER="${BLOB_CONTAINER:-data}"
+echo "    container: $BLOB_CONTAINER"
+
+BLOB_CONTAINER_URL="https://${STORAGE_ACCOUNT}.blob.core.windows.net/${BLOB_CONTAINER}"
 
 echo "==> Writing .env"
 cat > .env <<EOF
@@ -101,6 +115,7 @@ AZURE_SEARCH_QUERY_KEY=$AZURE_SEARCH_QUERY_KEY
 AZURE_SEARCH_INDEX_NAME=$SEARCH_INDEX_NAME
 AZURE_AI_PROJECT_ENDPOINT=$FOUNDRY_PROJECT_ENDPOINT
 AGENT_MODEL_DEPLOYMENT=$AGENT_MODEL_DEPLOYMENT
+BLOB_CONTAINER_URL=$BLOB_CONTAINER_URL
 EOF
 echo "    wrote $(pwd)/.env"
 

@@ -5,7 +5,7 @@ from dotenv import load_dotenv
 from openai import AzureOpenAI
 
 load_dotenv()
-
+print(os.environ["ENDPOINT_URL"])
 client = AzureOpenAI(
     azure_endpoint=os.environ["ENDPOINT_URL"],
     api_key=os.environ["AZURE_OPENAI_API_KEY"],
