@@ -18,6 +18,24 @@ source .venv/bin/activate
 
    Optional: Command Palette → "Python: Select Interpreter" → choose `.venv/bin/python` so VS Code uses the same env.
 
+4. Ensure Azure CLI is installed (required for Foundry agent bootstrap/login later).
+
+```bash
+az --version
+```
+
+If `az` is not found, install it:
+
+```bash
+curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
+```
+
+Then sign in:
+
+```bash
+az login
+```
+
 ## 2. Generic Model Call Baseline (Step 0)
 
 Goal: prove the model call works before vision/document logic.
@@ -69,6 +87,38 @@ python query_index.py
 
 Talk track:
 - "This query is vector-based, so it can find relevant charts even when filenames do not contain exact keywords."
+
+## 5.1 Generate a Portal-Ready Vector Query JSON (Step 3.1)
+
+Goal: generate a copy-paste JSON payload for Azure AI Search Search Explorer.
+
+Run:
+
+```bash
+python scripts/vectorize_image.py sampledata/report1.jpg > /tmp/search_query.json
+cat /tmp/search_query.json
+```
+
+Then in Azure portal -> AI Search -> your index -> Search explorer (JSON view), paste the output directly.
+
+Expected output format:
+
+```json
+{
+   "select": "id, file_path",
+   "vectorQueries": [
+      {
+         "kind": "vector",
+         "vector": [ ... ],
+         "fields": "image_vector",
+         "k": 5
+      }
+   ]
+}
+```
+
+Talk track:
+- "The script calls Azure AI Vision to generate the image embedding and prints the exact JSON body Search Explorer expects."
 
 ### Speaker Notes: Why Similar Reports Appear
 
@@ -137,7 +187,7 @@ python -m scripts.phr_extractor
 python -m agents.pipeline --image data/report1.jpg --query "platelet count"
 
 # 2. Create the OrchestratorAgent in Foundry
-#    Requires AZURE_AI_PROJECT_ENDPOINT in .env and `az login`.
+#    Requires AZURE_AI_PROJECT_ENDPOINT in .env and Azure CLI auth (`az login`).
 python -m agents.bootstrap_agents
 # copy the printed ORCHESTRATOR_AGENT_ID into .env
 

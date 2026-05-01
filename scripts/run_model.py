@@ -15,11 +15,12 @@ client = AzureOpenAI(
 completion = client.chat.completions.create(
     model=os.environ["DEPLOYMENT_NAME"],
     messages=[
-        {"role": "system", "content": "You are an AI assistant that helps people find information."},
-        {"role": "user", "content": "I am going to Paris, what should I see?"},
+        {"role": "system", "content": "You are an AI assistant my name is Dr. Who"},
+        {"role": "user", "content": "What is your name?"},
     ],
     max_tokens=300,
     temperature=0.7,
 )
 
 print(completion.choices[0].message.content)
+

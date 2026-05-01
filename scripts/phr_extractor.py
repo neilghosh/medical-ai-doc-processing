@@ -1,23 +1,12 @@
-"""Extract a structured PHR record from a lab-report image and explain it.
-
-Public functions `extract(image_path)` and `explain(record)` are also used as
-the PHRAgent's tools.
-"""
+"""Extract and explain PHR records from lab-report images."""
 import base64
 import json
 import os
-from typing import Optional
-from urllib.parse import urlparse
-
 import requests
-from azure.identity import DefaultAzureCredential
-from azure.storage.blob import BlobClient
 from dotenv import load_dotenv
 from openai import AzureOpenAI
-from pydantic import BaseModel, Field
 
 load_dotenv()
-
 _client = AzureOpenAI(
     azure_endpoint=os.environ["ENDPOINT_URL"],
     api_key=os.environ["AZURE_OPENAI_API_KEY"],
@@ -25,99 +14,86 @@ _client = AzureOpenAI(
 )
 _DEPLOYMENT = os.environ["DEPLOYMENT_NAME"]
 
+_PHR_JSON_SCHEMA = {
+    "name": "phr_record",
+    "strict": True,
+    "schema": {
+        "type": "object",
+        "properties": {
+            "report_date": {"type": ["string", "null"]},
+            "patient_name": {"type": ["string", "null"]},
+            "test_results": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "test_name": {"type": "string"},
+                        "result": {"type": ["number", "null"]},
+                        "ref_range": {"type": ["string", "null"]},
+                        "unit": {"type": ["string", "null"]},
+                    },
+                    "required": ["test_name", "result", "ref_range", "unit"],
+                    "additionalProperties": False,
+                },
+            },
+        },
+        "required": ["report_date", "patient_name", "test_results"],
+        "additionalProperties": False,
+    },
+}
 
-class PHRRecord(BaseModel):
-    report_date: Optional[str] = None
-    patient_name: Optional[str] = None
-    platelet_count: Optional[float] = None
-    platelet_unit: Optional[str] = None
-    hemoglobin: Optional[float] = None
-    hemoglobin_unit: Optional[str] = None
-    wbc_count: Optional[float] = None
-    wbc_unit: Optional[str] = None
-    rbc_count: Optional[float] = None
-    rbc_unit: Optional[str] = None
-    hematocrit: Optional[float] = None
-    total_cholesterol: Optional[float] = None
-    ldl_cholesterol: Optional[float] = None
-    hdl_cholesterol: Optional[float] = None
-    triglycerides: Optional[float] = None
-    glucose: Optional[float] = None
-    notes: Optional[str] = Field(default=None, description="Important observations")
-
-
-_EXTRACT_PROMPT = (
-    "Extract this lab report into JSON with these keys exactly: "
-    + ", ".join(PHRRecord.model_fields.keys())
-    + ". Use null if a value is not present. Return valid JSON only."
+_EXTRACTION_INSTRUCTIONS = (
+    "Extract the lab report into structured JSON using the provided schema. "
+    "For each test in test_results, always fill test_name, result, ref_range, and unit. "
+    "For ref_range, copy the reference interval text exactly from the report if present. "
+    "Look for labels like: Ref Range, Reference Range, Normal Range, Bio Ref Interval, Range. "
+    "If low/high bounds are shown in separate columns, combine as '<low>-<high>'. "
+    "Do not invent ranges. Use null only when no reference interval is visible for that test."
 )
 
 
-def _strip_fences(text: str) -> str:
-    text = text.strip()
-    if text.startswith("```"):
-        text = "\n".join(text.splitlines()[1:-1]).strip()
-    return text
-
-
 def _read_image_bytes(image_path: str) -> bytes:
+    """Read image from local path or URL."""
     if image_path.startswith(("http://", "https://")):
-        http_err: Optional[Exception] = None
-        try:
-            resp = requests.get(image_path, timeout=30)
-            resp.raise_for_status()
-            return resp.content
-        except Exception as exc:
-            http_err = exc
-
-        # For private blobs, fall back to Entra-authenticated blob download.
-        parsed = urlparse(image_path)
-        if parsed.netloc.endswith(".blob.core.windows.net"):
-            try:
-                blob = BlobClient.from_blob_url(image_path, credential=DefaultAzureCredential())
-                return blob.download_blob().readall()
-            except Exception as blob_exc:
-                raise RuntimeError(f"Failed to read blob URL: {image_path}") from blob_exc
-
-        raise RuntimeError(f"Failed to download URL: {image_path}") from http_err
-
-    with open(image_path, "rb") as f:
-        return f.read()
+        return requests.get(image_path, timeout=30).content
+    return open(image_path, "rb").read()
 
 
 def extract(image_path: str) -> dict:
-    """Run GPT-4o vision on a lab-report image; return a validated PHRRecord dict."""
+    """Extract PHR data from lab-report image."""
     b64 = base64.b64encode(_read_image_bytes(image_path)).decode()
     resp = _client.chat.completions.create(
         model=_DEPLOYMENT,
         messages=[{
             "role": "user",
             "content": [
-                {"type": "text", "text": _EXTRACT_PROMPT},
+                {
+                    "type": "text",
+                    "text": _EXTRACTION_INSTRUCTIONS,
+                },
                 {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64}"}},
             ],
         }],
+        response_format={"type": "json_schema", "json_schema": _PHR_JSON_SCHEMA},
         temperature=0,
         max_tokens=800,
     )
-    raw = resp.choices[0].message.content or "{}"
-    return PHRRecord.model_validate(json.loads(_strip_fences(raw))).model_dump()
+    content = resp.choices[0].message.content or "{}"
+    # Remove markdown code fences if present
+    content = content.strip()
+    if content.startswith("```"):
+        content = "\n".join(content.split("\n")[1:-1]).strip()
+    return json.loads(content)
 
 
-_EXPLAIN_SYS = (
-    "You are a friendly clinical assistant. Given a structured PHR JSON record, "
-    "produce a 4-6 sentence plain-language summary for the patient. Flag values "
-    "that look outside common reference ranges and recommend confirming with a "
-    "clinician. Do not invent missing values."
-)
 
 
 def explain(record: dict) -> str:
-    """Return a patient-friendly explanation of a PHR record."""
+    """Return patient-friendly explanation of PHR record."""
     resp = _client.chat.completions.create(
         model=_DEPLOYMENT,
         messages=[
-            {"role": "system", "content": _EXPLAIN_SYS},
+            {"role": "system", "content": "You are a clinical assistant. Summarize this PHR in 3-4 plain sentences for the patient. Flag unusual values."},
             {"role": "user", "content": json.dumps(record)},
         ],
         temperature=0.2,

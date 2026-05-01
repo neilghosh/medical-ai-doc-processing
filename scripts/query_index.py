@@ -45,7 +45,7 @@ def search(query: str, k: int = 5) -> list[dict]:
 
 
 if __name__ == "__main__":
-    q = "Find the report with HBA1C"
+    q = "Liver Function Test"
     print(f"Query: {q}\n")
     for i, m in enumerate(search(q), 1):
         print(f"{i}. {m['file_path']}  (score={m['score']:.4f})")
