@@ -22,7 +22,8 @@
 #   SEARCH_INDEX_NAME       Defaults to "medical-images-index"
 #   AGENT_MODEL_DEPLOYMENT  Defaults to OPENAI_DEPLOYMENT
 #   STORAGE_ACCOUNT         Storage account name (else picked from RG if unique)
-#   BLOB_CONTAINER          Blob container name (else picked from account if unique)
+#   BLOB_CONTAINER          Blob container name (default: data)
+#   SAMPLE_DATA_DIR         Local folder to seed blob container from (default: sampledata)
 #   PUSH_CODESPACES=1       Also push values via `gh secret set --app codespaces`
 #   GH_REPO=owner/repo      Required if PUSH_CODESPACES=1
 set -euo pipefail
@@ -101,6 +102,36 @@ echo "    storage: $STORAGE_ACCOUNT"
 
 BLOB_CONTAINER="${BLOB_CONTAINER:-data}"
 echo "    container: $BLOB_CONTAINER"
+
+echo "==> Ensuring blob container exists"
+CONTAINER_EXISTS=$(az storage container exists \
+  --account-name "$STORAGE_ACCOUNT" \
+  --name "$BLOB_CONTAINER" \
+  --auth-mode login \
+  --query exists -o tsv 2>/dev/null || echo "false")
+if [ "$CONTAINER_EXISTS" != "true" ]; then
+  az storage container create \
+    --account-name "$STORAGE_ACCOUNT" \
+    --name "$BLOB_CONTAINER" \
+    --auth-mode login >/dev/null
+  echo "    created container: $BLOB_CONTAINER"
+else
+  echo "    container already exists"
+fi
+
+SAMPLE_DATA_DIR="${SAMPLE_DATA_DIR:-sampledata}"
+if [ -d "$SAMPLE_DATA_DIR" ] && [ "$(find "$SAMPLE_DATA_DIR" -type f | wc -l | xargs)" -gt 0 ]; then
+  echo "==> Seeding blob container with sample files"
+  az storage blob upload-batch \
+    --account-name "$STORAGE_ACCOUNT" \
+    --destination "$BLOB_CONTAINER" \
+    --source "$SAMPLE_DATA_DIR" \
+    --auth-mode login \
+    --overwrite false >/dev/null
+  echo "    uploaded files from: $SAMPLE_DATA_DIR"
+else
+  echo "==> Skipping sample seed (no files in $SAMPLE_DATA_DIR)"
+fi
 
 BLOB_CONTAINER_URL="https://${STORAGE_ACCOUNT}.blob.core.windows.net/${BLOB_CONTAINER}"
 

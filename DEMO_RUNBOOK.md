@@ -24,8 +24,11 @@ agentic + API story. Copy/paste commands; speaker notes for each step.
 
 4. Azure CLI for AAD-based access to Foundry:
 
+  `./install.sh` installs Azure CLI into an isolated user-level environment if
+  `az` is missing, so it does not conflict with the project Python packages.
+
    ```bash
-   az --version || curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
+  az --version
    az login
    ```
 
