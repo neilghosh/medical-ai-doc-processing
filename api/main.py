@@ -4,7 +4,7 @@ Endpoints:
     POST /agents/ingest  — upload or URL an image to be indexed
     POST /agents/query   — vector-search the index for a clinical question
     POST /agents/phr     — extract + explain a single lab-report image
-    POST /agents/chat    — converse with the OrchestratorAgent (Foundry hosted)
+    POST /agents/chat    — converse with ClinicAssistant (Foundry hosted)
     GET  /healthz        — liveness probe
     GET  /docs           — auto-generated OpenAPI/Swagger UI
 """
@@ -25,7 +25,7 @@ from scripts.ingest_reports import ingest  # noqa: E402
 from scripts.phr_extractor import explain, extract  # noqa: E402
 from scripts.query_index import search  # noqa: E402
 from api.images import materialize_image  # noqa: E402
-from api.run_loop import latest_assistant_text, run_thread  # noqa: E402
+from agents.clinic_assitant import build_clinic_assistant, latest_assistant_text  # noqa: E402
 
 
 app = FastAPI(
@@ -110,38 +110,17 @@ async def phr_endpoint(
 
 
 # ---------------------------------------------------------------------------
-# Chat with Foundry-hosted orchestrator
+# Chat with Foundry-hosted ClinicAssistant
 # ---------------------------------------------------------------------------
 @app.post("/agents/chat", dependencies=[Depends(require_api_key)])
 async def chat_endpoint(req: ChatRequest) -> dict:
-    agent_id = os.environ.get("ORCHESTRATOR_AGENT_ID")
-    if not agent_id:
-        raise HTTPException(
-            status_code=503,
-            detail="ORCHESTRATOR_AGENT_ID not set. Run agents.bootstrap_agents first.",
-        )
-    timeout_s = int(os.environ.get("AGENT_RUN_TIMEOUT_S", "90"))
-
-    # Lazy import so the API can boot without Foundry creds for health checks.
-    from azure.ai.agents.models import FunctionTool, ToolSet
-    from agents.core.azure_clients import get_agents_client
-
-    agents = get_agents_client()
-    # Register the local Python tools so create_and_process can invoke them
-    # when the run hits requires_action.
-    toolset = ToolSet()
-    toolset.add(FunctionTool(functions={ingest, search, extract, explain}))
-    agents.enable_auto_function_calls(toolset)
-
     def _do() -> dict:
-        thread_id = req.thread_id
-        if not thread_id:
-            thread_id = agents.threads.create().id
+        agents, agent = build_clinic_assistant()
+        thread_id = req.thread_id or agents.threads.create().id
         agents.messages.create(thread_id=thread_id, role="user", content=req.message)
-        run = run_thread(agents, thread_id, agent_id, timeout_s=timeout_s)
-        status = getattr(run, "status", None) or run.get("status")
-        if status != "completed":
-            raise HTTPException(status_code=502, detail=f"Run {status}")
+        run = agents.runs.create_and_process(thread_id=thread_id, agent_id=agent.id)
+        if run.status != "completed":
+            raise HTTPException(status_code=502, detail=f"Run {run.status}")
         return {"thread_id": thread_id, "reply": latest_assistant_text(agents, thread_id)}
 
     return await run_in_threadpool(_do)

@@ -1,217 +1,253 @@
 # Lab2PHR Demo Runbook
 
-This is a simple, stage-friendly runbook from a fresh VS Code launch to a full agentic architecture story.
+A simple, stage-friendly walkthrough from a fresh VS Code launch to the full
+agentic + API story. Copy/paste commands; speaker notes for each step.
 
-## 1. Launch and Setup (1 minute)
+---
 
-1. Open the project in VS Code and open a terminal in the project root.
-2. Ensure `.env` exists with these keys (no fallback defaults in scripts):
+## 1. Setup (1 minute)
+
+1. Open the repo in VS Code, terminal in the project root.
+2. `.env` must contain (no fallback defaults):
    - `ENDPOINT_URL`, `DEPLOYMENT_NAME`, `AZURE_OPENAI_API_KEY`
    - `AZURE_SEARCH_ENDPOINT`, `AZURE_SEARCH_KEY`, `AZURE_SEARCH_QUERY_KEY`, `AZURE_SEARCH_INDEX_NAME`
    - `DATA_FOLDER`, `LAB_IMAGE_PATH`
-3. Run the one-shot bootstrap (creates venv, installs deps, validates env):
+   - `AZURE_AI_PROJECT_ENDPOINT` (only needed for sections 7+)
+3. Bootstrap venv + deps:
+
+   ```bash
+   ./install.sh
+   source .venv/bin/activate
+   ```
+
+   Optional: Command Palette → *Python: Select Interpreter* → `.venv/bin/python`.
+
+4. Azure CLI for AAD-based access to Foundry:
+
+   ```bash
+   az --version || curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
+   az login
+   ```
+
+---
+
+## 2. Step 0 — Generic Model Call
+
+Goal: prove model deployment + auth work before any vision/document logic.
 
 ```bash
-./install.sh
-source .venv/bin/activate
+python -m scripts.run_model
 ```
 
-   Optional: Command Palette → "Python: Select Interpreter" → choose `.venv/bin/python` so VS Code uses the same env.
+> "This single call confirms the Azure OpenAI deployment, key, and endpoint
+> are wired correctly. Everything after is just adding capabilities on top."
 
-4. Ensure Azure CLI is installed (required for Foundry agent bootstrap/login later).
+---
+
+## 3. Step 1 — Zero-Shot Vision Extraction
+
+Goal: GPT-4o reads a messy lab-report image directly.
 
 ```bash
-az --version
+python -m scripts.lab_report
 ```
 
-If `az` is not found, install it:
+> "No OCR, no template — the multimodal model reads the image and answers.
+> Great for prototyping; not the cheapest option for high volume."
+
+---
+
+## 4. Step 2 — Index All Reports into Vector Search
+
+Goal: build a multimodal search index from local report images.
 
 ```bash
-curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
+python -m scripts.ingest_reports
 ```
 
-Then sign in:
+> "Embed every image once with Azure AI Vision and push to Azure AI Search.
+> Retrieval is then cheap; the expensive GPT-4o call only runs on the matched
+> report."
+
+---
+
+## 5. Step 3 — Retrieve by Clinical Intent
+
+Goal: vector search returns the right report even with fuzzy queries.
 
 ```bash
-az login
+python -m scripts.query_index
 ```
 
-## 2. Generic Model Call Baseline (Step 0)
+> "Vector search finds semantically similar reports — close layouts and
+> clinical context — even when filenames have nothing to do with the query."
 
-Goal: prove the model call works before vision/document logic.
-
-Run:
+### 5.1 Portal-ready query JSON (optional)
 
 ```bash
-python run_model.py
+python -m scripts.vectorize_image sampledata/report1.jpg > /tmp/q.json
+cat /tmp/q.json
 ```
 
-Talk track:
-- "This confirms Azure model deployment connectivity and auth are correct."
+Paste into Azure portal → AI Search → your index → *Search explorer (JSON view)*.
 
-## 3. Zero-Shot Vision Extraction (Step 1)
-
-Goal: prove GPT-4o can read a messy report image directly.
-
-Run:
-
-```bash
-python lab_report.py
-```
-
-Talk track:
-- "No OCR pipeline code here. GPT-4o reads the image and answers directly."
-
-## 4. Index All Reports into Vector Search (Step 2)
-
-Goal: create searchable multimodal index entries from local report images.
-
-Run:
-
-```bash
-python ingest_reports.py
-```
-
-Talk track:
-- "We ingest vectors once, then reuse retrieval cheaply before extraction calls."
-
-## 5. Retrieve by Clinical Intent (Step 3)
-
-Goal: find the right report with vector search before extraction.
-
-Run:
-
-```bash
-python query_index.py
-```
-
-Talk track:
-- "This query is vector-based, so it can find relevant charts even when filenames do not contain exact keywords."
-
-## 5.1 Generate a Portal-Ready Vector Query JSON (Step 3.1)
-
-Goal: generate a copy-paste JSON payload for Azure AI Search Search Explorer.
-
-Run:
-
-```bash
-python scripts/vectorize_image.py sampledata/report1.jpg > /tmp/search_query.json
-cat /tmp/search_query.json
-```
-
-Then in Azure portal -> AI Search -> your index -> Search explorer (JSON view), paste the output directly.
-
-Expected output format:
+Expected shape:
 
 ```json
 {
-   "select": "id, file_path",
-   "vectorQueries": [
-      {
-         "kind": "vector",
-         "vector": [ ... ],
-         "fields": "image_vector",
-         "k": 5
-      }
-   ]
+  "select": "id, file_path",
+  "vectorQueries": [
+    { "kind": "vector", "vector": [ ... ], "fields": "image_vector", "k": 5 }
+  ]
 }
 ```
 
-Talk track:
-- "The script calls Azure AI Vision to generate the image embedding and prints the exact JSON body Search Explorer expects."
+### Speaker notes — why "similar" reports score close
 
-### Speaker Notes: Why Similar Reports Appear
+- Pure vector search (`search_text=None`, `image_vector` k-NN) always returns
+  nearest neighbours — no exact-match guarantee.
+- `@search.score` is similarity, not relevance to a keyword.
+- For exact terms like `HBA1C`, add OCR text to the index and run **hybrid**
+  search (text + vector) with a score threshold.
 
-- Current retrieval is vector-only (`search_text=None` with `image_vector` k-NN), so the system always returns nearest neighbors.
-- `@search.score` here is similarity, not exact keyword containment; close scores are normal when reports look structurally similar.
-- Temperature is not involved in retrieval ranking. This is index/query design behavior.
-- In larger corpora, vector-only search finds semantically similar reports (layout + clinical context), but can miss exact acronym precision.
-- For exact term guarantees like `HBA1C`, add OCR text to the index and run hybrid search (text + vector), optionally with score thresholds.
+---
 
-## 6. Architecture Story for Q&A
+## 6. Step 4 — Sequential Pipeline (no agent yet)
 
-Use this model split:
-
-1. GPT-4o for reasoning + schema extraction.
-2. Azure AI Vision vectorization for multimodal embeddings.
-3. Azure AI Search for cost-efficient retrieval.
-
-Use this service tradeoff:
-
-1. Azure AI Document Intelligence for high-volume standardized extraction pipelines.
-2. GPT-4o workflows when adaptive reasoning and agent decisions are needed.
-
-## 7. Productized Demo Track (Second Version)
-
-Keep a separate branch/folder for the "pre-hosted" cloud demo:
-
-1. Blob upload -> Event Grid -> Azure Function trigger.
-2. Function does retrieval + extraction.
-3. Store final structured record in Cosmos DB or SQL.
-
-Suggested split:
-- `main` branch: local stage demo scripts (fast and transparent).
-- `prod-demo` branch: serverless hosted architecture (upload and watch it flow).
-
-## 8. Stage Safety Checklist
-
-1. Run `python run_model.py` once before session starts.
-2. Keep 3-4 known images in `data/` with one backup image.
-3. Verify index exists and query key works.
-4. Keep one fallback command visible in notes for each step.
-5. Rotate keys after the event.
-
-## 9. Agentic Version (Foundry agent + FastAPI)
-
-A single OrchestratorAgent owns all four tools. The same agent definition runs
-locally and in Foundry — the SDK's `runs.create_and_process` automatically
-executes the FunctionTools in the caller's process.
-
-- `scripts.ingest_reports.ingest(path)` → tool
-- `scripts.query_index.search(query, k)` → tool
-- `scripts.phr_extractor.extract(image)` / `.explain(record)` → tools
-
-Demo flow:
+Goal: chain `search → extract → explain` in plain Python.
 
 ```bash
-# Step 0/1 baselines
-python -m scripts.run_model
-python -m scripts.lab_report
+python -m agents.pipeline --image sampledata/report1.jpg --query "platelet count"
+```
 
-# Capability scripts (also runnable standalone)
-python -m scripts.ingest_reports
-python -m scripts.query_index
-python -m scripts.phr_extractor
+> "Same capability functions, just composed by code. This is the baseline the
+> agent will replace."
 
-# 1. Same scripts, run as a sequential pipeline
-python -m agents.pipeline --image data/report1.jpg --query "platelet count"
+---
 
-# 2. Create the OrchestratorAgent in Foundry
-#    Requires AZURE_AI_PROJECT_ENDPOINT in .env and Azure CLI auth (`az login`).
-python -m agents.bootstrap_agents
-# copy the printed ORCHESTRATOR_AGENT_ID into .env
+## 7. Step 5 — ClinicAssistant Agent (Foundry)
 
-# 3. Chat with the orchestrator (it picks the right tool per turn)
+A single agent, `clinic-assistant`, owns all four tools. The SDK's
+`runs.create_and_process` runs the `requires_action / submit_tool_outputs`
+loop for us; the FunctionTools execute in this Python process.
+
+Tools the agent can call:
+
+- `scripts.ingest_reports.ingest(path)`
+- `scripts.query_index.search(query, k)`
+- `scripts.phr_extractor.extract(image_path)`
+- `scripts.phr_extractor.explain(record)`
+
+### 7.1 One-shot CLI
+
+```bash
+# fresh thread each call
+python -m agents.clinic_assitant "explain sampledata/report1.jpg"
+
+# continue an existing thread (id printed by the previous run)
+python -m agents.clinic_assitant --thread thread_xxx "what's the platelet value?"
+```
+
+### 7.2 Interactive REPL (one shared thread, retains context)
+
+```bash
 python -m agents.chat
+# you> ingest sampledata/report1.jpg
+# you> what's the platelet value?
+# you> exit
+```
 
-# 4. HTTP surface (Swagger at /docs)
-uvicorn api.main:app --reload --port 8000
+### 7.3 See it in Foundry
 
-# 5. Public URL on Azure Container Apps
+ai.azure.com → your project → **Agents** (the `clinic-assistant` definition)
+and **Threads** (full message + tool-call trace per `thread_id`).
+
+> "The same Python tool functions are now invoked by the model — the agent
+> picks the tool; we don't write routing code. Threads give us
+> per-conversation memory; the agent itself is reusable across users."
+
+---
+
+## 8. Step 6 — HTTP Surface (FastAPI)
+
+Same capabilities, both as deterministic REST and as the LLM-routed `/chat`.
+
+```bash
+uvicorn api.main:app --reload --port 8000 --host 0.0.0.0
+# Swagger UI: http://localhost:8000/docs
+```
+
+| Endpoint | Behaviour |
+| --- | --- |
+| `POST /agents/ingest` | Upload file or `image_url` → indexes into Azure Search |
+| `POST /agents/query`  | `{query, k}` → vector matches |
+| `POST /agents/phr`    | Upload image → `{record, explanation}` |
+| `POST /agents/chat`   | `{message, thread_id?}` → `{thread_id, reply}` |
+| `GET  /healthz`       | Liveness |
+
+Smoke tests:
+
+```bash
+curl http://localhost:8000/healthz
+
+curl -X POST http://localhost:8000/agents/query \
+     -H 'Content-Type: application/json' \
+     -d '{"query":"platelet count","k":3}'
+
+curl -X POST http://localhost:8000/agents/chat \
+     -H 'Content-Type: application/json' \
+     -d '{"message":"explain sampledata/report1.jpg"}'
+```
+
+If `API_KEY` is set in `.env`, add `-H "x-api-key: $API_KEY"` to every call.
+
+### Codespaces port forwarding
+
+VS Code **Ports** panel → port 8000 should auto-appear. Right-click → *Port
+Visibility → Public* to share `https://<codespace>-8000.app.github.dev/docs`.
+Set `API_KEY` first before going public.
+
+---
+
+## 9. Step 7 — Deploy to Azure Container Apps
+
+```bash
 RG=med-doc LOCATION=eastus ACR_NAME=lab2phracr \
 ACA_ENV=lab2phr-env APP_NAME=lab2phr-api \
 ./infra/deploy.sh
-# -> https://<app>.<region>.azurecontainerapps.io/docs
+# → https://<app>.<region>.azurecontainerapps.io/docs
 ```
 
-### Housekeeping (optional, one-time)
+---
 
-After the move, the original top-level files are now thin re-export shims that
-just forward to `scripts.*`. Delete them when convenient:
+## 10. Architecture Story for Q&A
 
-```bash
-rm ingest_reports.py query_index.py phr_extractor.py lab_report.py run_model.py
-rm agents/core/vision.py agents/core/phr_schema.py
-chmod +x infra/deploy.sh
-```
+Model split:
+
+1. **GPT-4o** — reasoning, schema extraction, agent orchestration.
+2. **Azure AI Vision** — multimodal embeddings for the index.
+3. **Azure AI Search** — cheap retrieval.
+4. **Azure AI Foundry Agents** — hosted agent definition + thread storage.
+
+Service tradeoff:
+
+- **Document Intelligence** for high-volume, well-structured forms.
+- **GPT-4o + agent** when the workflow needs adaptive reasoning or multi-step
+  tool use.
+
+Two paths to capability in this repo:
+
+- Deterministic REST (`/ingest`, `/query`, `/phr`) — predictable, scriptable.
+- Conversational (`/chat` + ClinicAssistant) — the model picks the tool.
+
+---
+
+## 11. Stage Safety Checklist
+
+1. Run `python -m scripts.run_model` once before the session starts.
+2. Keep 3–4 known images in `sampledata/` plus one backup.
+3. Confirm the search index exists and `AZURE_SEARCH_QUERY_KEY` works.
+4. `az login` is current; `AZURE_AI_PROJECT_ENDPOINT` reachable.
+5. Have one fallback command per step visible in notes.
+6. Rotate keys after the event.
 

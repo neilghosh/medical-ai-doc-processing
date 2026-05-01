@@ -7,7 +7,7 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-from agents import orchestrator
+from agents import clinic_assitant
 from agents.core.azure_clients import get_agents_client
 
 load_dotenv()
@@ -29,7 +29,7 @@ def main() -> None:
     existing = _find(agents, "orchestrator-agent")
     if existing:
         agents.delete_agent(_id(existing))
-    agent_id = _id(orchestrator.build())
+    agent_id = _id(clinic_assitant.build())
     print(f"[created] orchestrator-agent -> {agent_id}")
 
     Path(".agents.json").write_text(json.dumps({"orchestrator": agent_id}, indent=2))
