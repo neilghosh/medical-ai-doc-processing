@@ -9,12 +9,50 @@ from pathlib import Path
 import requests
 from azure.core.credentials import AzureKeyCredential
 from azure.search.documents import SearchClient
+from azure.search.documents.indexes import SearchIndexClient
+from azure.search.documents.indexes.models import (
+    HnswAlgorithmConfiguration,
+    SearchableField,
+    SearchField,
+    SearchFieldDataType,
+    SearchIndex,
+    SimpleField,
+    VectorSearch,
+    VectorSearchProfile,
+)
 from dotenv import load_dotenv
 
 load_dotenv()
 
 VISION_ENDPOINT = os.environ["ENDPOINT_URL"]
 VISION_KEY = os.environ["AZURE_OPENAI_API_KEY"]
+VECTOR_DIM = 1024
+PROFILE = "hnsw-profile"
+
+
+def _ensure_index() -> None:
+    idx_client = SearchIndexClient(
+        os.environ["AZURE_SEARCH_ENDPOINT"],
+        AzureKeyCredential(os.environ["AZURE_SEARCH_KEY"]),
+    )
+    idx_client.create_or_update_index(SearchIndex(
+        name=os.environ["AZURE_SEARCH_INDEX_NAME"],
+        fields=[
+            SimpleField(name="id", type=SearchFieldDataType.String, key=True, filterable=True),
+            SearchableField(name="file_path", type=SearchFieldDataType.String, filterable=True),
+            SearchField(
+                name="image_vector",
+                type=SearchFieldDataType.Collection(SearchFieldDataType.Single),
+                searchable=True,
+                vector_search_dimensions=VECTOR_DIM,
+                vector_search_profile_name=PROFILE,
+            ),
+        ],
+        vector_search=VectorSearch(
+            algorithms=[HnswAlgorithmConfiguration(name="hnsw-config")],
+            profiles=[VectorSearchProfile(name=PROFILE, algorithm_configuration_name="hnsw-config")],
+        ),
+    ))
 
 
 def _doc_id(path: Path) -> str:
@@ -41,6 +79,7 @@ def _embed_image(image_path: str) -> list[float]:
 
 def ingest(path: str) -> dict:
     """Embed an image (or every image under a folder) and upsert into the search index."""
+    _ensure_index()
     target = Path(path)
     if target.is_dir():
         files = [p for ext in ("jpg", "jpeg", "png", "JPG", "JPEG", "PNG")
