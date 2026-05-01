@@ -168,6 +168,61 @@ and **Threads** (full message + tool-call trace per `thread_id`).
 
 ---
 
+## 7b. Step 5b — Multi-Agent Workflow (agent-to-agent handoff)
+
+Goal: show *agents talking to agents* — the output of one agent is the input
+to the next, no human in between. Built with the **Microsoft Agent Framework**
+`WorkflowBuilder` + `@executor` decorators.
+
+Two specialists wired into a graph:
+
+- **`query_agent`** — tool `search`. Picks the best-matching report and
+  returns the file path.
+- **`summarizer_agent`** — tools `extract` + `explain`. Reads that report
+  and answers the user's question.
+
+```bash
+python -m agents.workflow "Summarise the CBC report"
+```
+
+Expected console flow (the `>>` / `<<` lines are the A2A handoff):
+
+```
+[tracing] -> Azure App Insights (Foundry Tracing tab)
+[workflow] query -> summarize    input='Summarise the CBC report'
+
+>> query_agent      <- 'Summarise the CBC report'
+<< query_agent      -> /workspaces/.../sampledata/report1.jpg
+
+>> summarizer_agent <- /workspaces/.../sampledata/report1.jpg
+<< summarizer_agent -> Here is a friendly summary of your CBC report ...
+
+[final output] ...
+[Foundry agents]  query_agent=asst_...  summarizer_agent=asst_...
+```
+
+> "Notice nobody re-prompted. `query_agent`'s reply (a file path) became the
+> input to `summarizer_agent` automatically — that's the agent-to-agent edge
+> defined in `WorkflowBuilder`."
+
+### 7b.1 See it in Foundry
+
+- **Agents** tab → both `query_agent` and `summarizer_agent` show up as
+  separate agent definitions, each with their own threads + run-step trace.
+- **Tracing** tab (requires `APPLICATIONINSIGHTS_CONNECTION_STRING` in `.env`,
+  written automatically by `infra/bootstrap.sh`) → one trace per workflow run
+  with nested spans:
+  `workflow.run → executor.process query → Invoke Agent query_agent →
+  executor.process summarize → Invoke Agent summarizer_agent`.
+  Click any LLM span to see the raw prompt / completion (sensitive-data mode
+  is on for the demo).
+
+> "The Agents tab shows *what* each agent did. The Tracing tab shows *how
+> they were chained*. The edge between them lives in our Python — Foundry
+> doesn't model multi-agent topology natively."
+
+---
+
 ## 8. Step 6 — HTTP Surface (FastAPI)
 
 Same capabilities, both as deterministic REST and as the LLM-routed `/chat`.
