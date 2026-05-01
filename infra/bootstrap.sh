@@ -21,6 +21,8 @@
 #   OPENAI_DEPLOYMENT       Model deployment name (else first one is used)
 #   SEARCH_INDEX_NAME       Defaults to "medical-images-index"
 #   AGENT_MODEL_DEPLOYMENT  Defaults to OPENAI_DEPLOYMENT
+#   STORAGE_ACCOUNT         Storage account name (else picked from RG if unique)
+#   BLOB_CONTAINER          Blob container name (else picked from account if unique)
 #   PUSH_CODESPACES=1       Also push values via `gh secret set --app codespaces`
 #   GH_REPO=owner/repo      Required if PUSH_CODESPACES=1
 set -euo pipefail
@@ -92,6 +94,16 @@ AZURE_SEARCH_QUERY_KEY=$(az search query-key list \
 SEARCH_INDEX_NAME="${SEARCH_INDEX_NAME:-medical-images-index}"
 AGENT_MODEL_DEPLOYMENT="${AGENT_MODEL_DEPLOYMENT:-$OPENAI_DEPLOYMENT}"
 
+echo "==> Discovering Storage account"
+STORAGE_ACCOUNT=$(pick_one "Storage account" "${STORAGE_ACCOUNT:-}" \
+  az storage account list -g "$RG" --query "[].name" -o tsv)
+echo "    storage: $STORAGE_ACCOUNT"
+
+BLOB_CONTAINER="${BLOB_CONTAINER:-data}"
+echo "    container: $BLOB_CONTAINER"
+
+BLOB_CONTAINER_URL="https://${STORAGE_ACCOUNT}.blob.core.windows.net/${BLOB_CONTAINER}"
+
 echo "==> Writing .env"
 cat > .env <<EOF
 ENDPOINT_URL=$ENDPOINT_URL
@@ -103,6 +115,7 @@ AZURE_SEARCH_QUERY_KEY=$AZURE_SEARCH_QUERY_KEY
 AZURE_SEARCH_INDEX_NAME=$SEARCH_INDEX_NAME
 AZURE_AI_PROJECT_ENDPOINT=$FOUNDRY_PROJECT_ENDPOINT
 AGENT_MODEL_DEPLOYMENT=$AGENT_MODEL_DEPLOYMENT
+BLOB_CONTAINER_URL=$BLOB_CONTAINER_URL
 EOF
 echo "    wrote $(pwd)/.env"
 
