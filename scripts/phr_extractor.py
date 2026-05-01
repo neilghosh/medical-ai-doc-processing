@@ -115,7 +115,7 @@ def explain(record: dict) -> str:
 
 
 if __name__ == "__main__":
-    img = os.environ.get("LAB_IMAGE_PATH", "data/report1.jpg")
+    img = os.environ.get("LAB_IMAGE_PATH", "sampledata/report1.jpg")
     record = extract(img)
     print(json.dumps(record, indent=2))
     print("\n--- Explanation ---")
