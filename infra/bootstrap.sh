@@ -104,6 +104,20 @@ echo "    container: $BLOB_CONTAINER"
 
 BLOB_CONTAINER_URL="https://${STORAGE_ACCOUNT}.blob.core.windows.net/${BLOB_CONTAINER}"
 
+echo "==> Discovering Application Insights (optional, for telemetry)"
+APPI_NAME=$(az resource list -g "$RG" \
+  --resource-type microsoft.insights/components \
+  --query "[0].name" -o tsv 2>/dev/null || true)
+APPLICATIONINSIGHTS_CONNECTION_STRING=""
+if [ -n "$APPI_NAME" ]; then
+  APPLICATIONINSIGHTS_CONNECTION_STRING=$(az resource show -g "$RG" \
+    --resource-type microsoft.insights/components -n "$APPI_NAME" \
+    --query properties.ConnectionString -o tsv 2>/dev/null || true)
+  echo "    appinsights: $APPI_NAME"
+else
+  echo "    appinsights: (none in RG -- telemetry will be disabled at runtime)"
+fi
+
 echo "==> Writing .env"
 cat > .env <<EOF
 ENDPOINT_URL=$ENDPOINT_URL
@@ -116,6 +130,7 @@ AZURE_SEARCH_INDEX_NAME=$SEARCH_INDEX_NAME
 AZURE_AI_PROJECT_ENDPOINT=$FOUNDRY_PROJECT_ENDPOINT
 AGENT_MODEL_DEPLOYMENT=$AGENT_MODEL_DEPLOYMENT
 BLOB_CONTAINER_URL=$BLOB_CONTAINER_URL
+APPLICATIONINSIGHTS_CONNECTION_STRING=$APPLICATIONINSIGHTS_CONNECTION_STRING
 EOF
 echo "    wrote $(pwd)/.env"
 

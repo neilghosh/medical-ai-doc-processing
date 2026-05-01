@@ -10,3 +10,5 @@ fastapi==0.115.5
 uvicorn[standard]==0.32.1
 python-multipart==0.0.17
 azure-storage-blob==12.23.1
+agent-framework==1.0.0rc6
+azure-monitor-opentelemetry>=1.6.0
