@@ -71,10 +71,12 @@ PROJECTS_JSON=$(az rest --method get \
   -o json 2>/dev/null || echo '{"value":[]}')
 PROJECT_NAMES=$(echo "$PROJECTS_JSON" | python3 -c 'import json,sys;print("\n".join(p["name"] for p in json.load(sys.stdin).get("value",[])))')
 FOUNDRY_PROJECT=$(pick_one "Foundry project" "${FOUNDRY_PROJECT:-}" echo "$PROJECT_NAMES")
+FOUNDRY_PROJECT="${FOUNDRY_PROJECT##*/}"   # strip any "account/" prefix
 echo "    project: $FOUNDRY_PROJECT"
 
-HOST=$(echo "$ENDPOINT_URL" | sed -E 's#^https?://([^/]+).*#\1#')
-FOUNDRY_PROJECT_ENDPOINT="https://${HOST}/api/projects/${FOUNDRY_PROJECT}"
+# Foundry project endpoint must use the `services.ai.azure.com` host, not the
+# account's `cognitiveservices.azure.com` endpoint.
+FOUNDRY_PROJECT_ENDPOINT="https://$(echo "$FOUNDRY_ACCOUNT" | tr '[:upper:]' '[:lower:]').services.ai.azure.com/api/projects/${FOUNDRY_PROJECT}"
 
 echo "==> Discovering AI Search service"
 SEARCH_SERVICE=$(pick_one "Search service" "${SEARCH_SERVICE:-}" \

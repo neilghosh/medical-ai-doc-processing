@@ -12,12 +12,6 @@ from openai import AzureOpenAI
 load_dotenv()
 log = logging.getLogger(__name__)
 
-# Demo: always dump raw chat-completion HTTP traffic to stdout.
-logging.basicConfig(level=logging.DEBUG)
-logging.getLogger("httpx").setLevel(logging.DEBUG)
-logging.getLogger("openai").setLevel(logging.DEBUG)
-os.environ["OPENAI_LOG"] = "debug"
-
 _client = AzureOpenAI(
     azure_endpoint=os.environ["ENDPOINT_URL"],
     api_key=os.environ["AZURE_OPENAI_API_KEY"],
