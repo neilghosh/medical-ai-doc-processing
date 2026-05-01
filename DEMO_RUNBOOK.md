@@ -242,6 +242,45 @@ Two paths to capability in this repo:
 
 ---
 
+## 10b. Google Cloud Equivalents
+
+If you wanted to rebuild this same demo on Google Cloud instead of Azure, the
+mapping is fairly clean — every Azure service used here has a near one-to-one
+counterpart in the Google ecosystem. The reasoning model (`GPT-4o`) becomes
+**Gemini 2.5 Pro / Flash** via either the **Gemini API** (`google-genai` SDK,
+fastest to prototype) or **Vertex AI** (`google-cloud-aiplatform`, IAM + VPC
+controls for production); both are natively multimodal so `scripts.run_model`
+and `scripts.lab_report` collapse into a single `client.models.generate_content`
+call that takes the image inline. For the multimodal embeddings step
+(`scripts.vectorize_image`), Azure AI Vision is replaced by Vertex AI's
+**`multimodalembedding@001`** model, which produces image+text embeddings in a
+shared space just like Azure's `vectorizeImage` API. The vector index itself
+(Azure AI Search) maps to **Vertex AI Vector Search** (formerly Matching
+Engine) for a fully managed ANN index, or **AlloyDB / Cloud SQL with
+`pgvector`** if you'd rather keep vectors next to relational data, or
+**Firestore vector search** for lighter workloads. The agent layer (Azure AI
+Foundry Agents + `runs.create_and_process`) is replaced by the **Agent
+Development Kit (ADK)** — an open-source Python framework where you declare
+tools as plain functions, hand them to an `LlmAgent`, and let the runner own
+the tool-call loop; deployment targets are **Vertex AI Agent Engine** (managed
+sessions/threads, the closest analog to Foundry's hosted threads) or **Cloud
+Run** for a self-hosted FastAPI wrapper. Storage and hosting round it out:
+**Cloud Storage** instead of Blob Storage for the report images, **Cloud Run**
+instead of Azure Container Apps for the `/chat` API, and **Application Default
+Credentials (`gcloud auth application-default login`)** instead of `az login`
+for local auth. The Python tool functions in `scripts/` would barely change —
+only the client construction at the top of each file.
+
+| This repo (Azure) | Google Cloud equivalent |
+| --- | --- |
+| Azure OpenAI GPT-4o | Gemini 2.5 Pro/Flash via Gemini API or Vertex AI |
+| Azure AI Vision multimodal embeddings | Vertex AI `multimodalembedding@001` |
+| Azure AI Search (vector index) | Vertex AI Vector Search / `pgvector` on AlloyDB |
+| Azure AI Foundry Agents + threads | ADK `LlmAgent` + Vertex AI Agent Engine sessions |
+| Azure Blob Storage | Cloud Storage |
+| Azure Container Apps | Cloud Run |
+| `az login` (AAD) | `gcloud auth application-default login` (ADC) |
+
 ## 11. Stage Safety Checklist
 
 1. Run `python -m scripts.run_model` once before the session starts.
@@ -250,4 +289,125 @@ Two paths to capability in this repo:
 4. `az login` is current; `AZURE_AI_PROJECT_ENDPOINT` reachable.
 5. Have one fallback command per step visible in notes.
 6. Rotate keys after the event.
+
+---
+
+## 12. Cost & Pricing (approximate)
+
+> All numbers below are **rough public list prices in USD as of late 2025**
+> for the `eastus` / `eastus2` regions. Always check the official Azure
+> pricing pages before quoting customers — prices change and vary by region,
+> tier, and commitment.
+
+### 12.1 Per-component cost
+
+| Component | What you pay for | Approx. list price | Demo footprint |
+| --- | --- | --- | --- |
+| **Azure OpenAI — GPT-4o** | Input + output tokens | ~$2.50 / 1M input, ~$10 / 1M output tokens | A full demo run (vision + extract + explain over a few reports) is well under **$0.10**. |
+| **Azure OpenAI — GPT-4o image input** | Tiles per image (depends on resolution) | ~$0.001–0.005 per lab image | Negligible for a handful of images. |
+| **Azure AI Vision — multimodal embeddings** | Per 1,000 transactions (`vectorizeImage` / `vectorizeText`) | **S1 tier ~$1 per 1,000 calls** | Indexing 10 reports + a few queries ≈ **$0.02**. |
+| **Azure AI Search** | Hourly per replica/partition + storage | **Basic ~$75 / month**, Free tier $0 (1 index, 50 MB) | Use **Free tier** for the demo — $0. |
+| **Azure AI Foundry (Agents)** | Underlying model tokens + thread storage | Tokens billed via Azure OpenAI; thread storage negligible at demo volume | Effectively the same as the GPT-4o line above. |
+| **Azure Blob Storage** (optional, for `/ingest` from URL) | GB-month + transactions | **Hot LRS ~$0.018 / GB-month**, ~$0.004 per 10K reads | Pennies. |
+| **Azure Container Registry** | Per registry per day | **Basic ~$0.167 / day (~$5 / month)** + storage | ~$5 / month if left running. |
+| **Azure Container Apps** | vCPU-second + GiB-second + requests; generous free grant | First **180,000 vCPU-s + 360,000 GiB-s + 2M requests free per month**; then ~$0.000024 / vCPU-s | A demo app idling at min-replicas=0 is **$0**; a small always-on replica is ~$15–30 / month. |
+| **Azure Monitor / Log Analytics** (auto-enabled by ACA) | GB ingested | ~$2.30 / GB ingested, 5 GB free | Negligible for demo traffic. |
+
+**Bottom line for a single live demo session:** under **$1** of consumption if
+you start from a clean state, use the AI Search Free tier, and tear things
+down afterward. Leaving the **Basic AI Search tier** running is by far the
+biggest silent cost (~$75/month), followed by **ACR Basic** (~$5/month).
+
+### 12.2 What to watch out for
+
+- **AI Search Basic** bills hourly whether you query it or not — switch to
+  **Free** for demos, or delete the service after the event.
+- **Container Apps** with `min-replicas >= 1` keeps a vCPU warm 24/7. Set
+  `--min-replicas 0` to scale to zero between demos.
+- **GPT-4o vision** cost scales with image **resolution** (more tiles = more
+  tokens). Downscale lab images before sending if cost matters.
+- **Foundry threads** persist until deleted — fine for demo, but clean up if
+  PHI ever touched them.
+
+Official pricing references (verify before quoting):
+- <https://azure.microsoft.com/pricing/details/cognitive-services/openai-service/>
+- <https://azure.microsoft.com/pricing/details/cognitive-services/computer-vision/>
+- <https://azure.microsoft.com/pricing/details/search/>
+- <https://azure.microsoft.com/pricing/details/container-apps/>
+- <https://azure.microsoft.com/pricing/details/container-registry/>
+- <https://azure.microsoft.com/pricing/details/storage/blobs/>
+
+---
+
+## 13. Cleanup
+
+The cheapest way to stop the meter is to **delete the resource group** — it
+removes ACR, the Container Apps environment, the app, AI Search, Log
+Analytics, and any storage accounts in one shot.
+
+### 13.1 Nuke the whole demo RG
+
+```bash
+# Replace with the RG you used in section 9.
+RG=med-doc
+az group delete -n "$RG" --yes --no-wait
+```
+
+> `--no-wait` returns immediately; deletion runs in the background. Confirm
+> later with `az group exists -n "$RG"` (should print `false`).
+
+### 13.2 Selective cleanup (keep the RG)
+
+If the RG is shared with other workloads, delete only the demo resources:
+
+```bash
+RG=med-doc
+APP_NAME=lab2phr-api
+ACA_ENV=lab2phr-env
+ACR_NAME=lab2phracr
+SEARCH_NAME=<your-search-service>      # from AZURE_SEARCH_ENDPOINT
+OPENAI_NAME=<your-openai-resource>     # from ENDPOINT_URL
+FOUNDRY_PROJECT=<your-foundry-project> # from AZURE_AI_PROJECT_ENDPOINT
+
+az containerapp delete       -g "$RG" -n "$APP_NAME"     --yes
+az containerapp env delete   -g "$RG" -n "$ACA_ENV"      --yes
+az acr delete                -g "$RG" -n "$ACR_NAME"     --yes
+az search service delete     -g "$RG" -n "$SEARCH_NAME"  --yes
+# Azure OpenAI + Foundry are Cognitive Services accounts:
+az cognitiveservices account delete -g "$RG" -n "$OPENAI_NAME"
+az cognitiveservices account delete -g "$RG" -n "$FOUNDRY_PROJECT"
+```
+
+> Cognitive Services accounts go into a **soft-delete** state for 48 hours.
+> To free the name immediately:
+> `az cognitiveservices account purge -g "$RG" -n "$OPENAI_NAME" -l <region>`
+
+### 13.3 Foundry agents and threads
+
+If you reuse the Foundry project but want to clear demo agents/threads:
+
+- ai.azure.com → your project → **Agents** → delete `clinic-assistant`.
+- ai.azure.com → your project → **Threads** → delete demo thread IDs.
+
+### 13.4 Search index only (keep the service)
+
+```bash
+python -m scripts.clear_index    # drops all docs from the configured index
+```
+
+### 13.5 Local cleanup
+
+```bash
+deactivate 2>/dev/null || true
+rm -rf .venv __pycache__ */__pycache__
+# Rotate any keys that were pasted into .env during the demo.
+```
+
+### 13.6 Final sanity check
+
+```bash
+az group exists -n "$RG"                # expect: false
+az cognitiveservices account list -g "$RG" 2>/dev/null   # expect: empty / RG gone
+```
+
 

@@ -8,4 +8,8 @@ source .venv/bin/activate
 python3 -m pip install --upgrade pip
 python3 -m pip install -r requirements.txt
 
+echo "Installing Azure CLI (pip)..."
+python3 -m pip install azure-cli
+
 echo "Done. Activate with: source .venv/bin/activate"
+echo "az: $(command -v az || echo NOT FOUND)"
