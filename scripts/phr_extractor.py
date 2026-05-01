@@ -1,12 +1,16 @@
 """Extract and explain PHR records from lab-report images."""
 import base64
 import json
+import logging
 import os
-import requests
+
+from azure.identity import DefaultAzureCredential
+from azure.storage.blob import BlobClient
 from dotenv import load_dotenv
 from openai import AzureOpenAI
 
 load_dotenv()
+log = logging.getLogger(__name__)
 _client = AzureOpenAI(
     azure_endpoint=os.environ["ENDPOINT_URL"],
     api_key=os.environ["AZURE_OPENAI_API_KEY"],
@@ -53,10 +57,17 @@ _EXTRACTION_INSTRUCTIONS = (
 
 
 def _read_image_bytes(image_path: str) -> bytes:
-    """Read image from local path or URL."""
-    if image_path.startswith(("http://", "https://")):
-        return requests.get(image_path, timeout=30).content
-    return open(image_path, "rb").read()
+    """Read image bytes from a local path or an Azure blob URL (via MI)."""
+    log.info("reading image: %s", image_path)
+    try:
+        if image_path.startswith(("http://", "https://")):
+            return BlobClient.from_blob_url(
+                image_path, credential=DefaultAzureCredential()
+            ).download_blob().readall()
+        return open(image_path, "rb").read()
+    except Exception:
+        log.exception("failed to read image: %s", image_path)
+        raise
 
 
 def extract(image_path: str) -> dict:
