@@ -19,7 +19,7 @@
 #   FOUNDRY_PROJECT         Foundry project name under that account
 #   SEARCH_SERVICE          Search service name
 #   OPENAI_DEPLOYMENT       Model deployment name (else first one is used)
-#   SEARCH_INDEX_NAME       Defaults to "lab-reports"
+#   SEARCH_INDEX_NAME       Defaults to "medical-images-index"
 #   AGENT_MODEL_DEPLOYMENT  Defaults to OPENAI_DEPLOYMENT
 #   PUSH_CODESPACES=1       Also push values via `gh secret set --app codespaces`
 #   GH_REPO=owner/repo      Required if PUSH_CODESPACES=1
@@ -87,7 +87,7 @@ AZURE_SEARCH_KEY=$(az search admin-key show \
 AZURE_SEARCH_QUERY_KEY=$(az search query-key list \
   -g "$RG" --service-name "$SEARCH_SERVICE" --query "[0].key" -o tsv)
 
-SEARCH_INDEX_NAME="${SEARCH_INDEX_NAME:-lab-reports}"
+SEARCH_INDEX_NAME="${SEARCH_INDEX_NAME:-medical-images-index}"
 AGENT_MODEL_DEPLOYMENT="${AGENT_MODEL_DEPLOYMENT:-$OPENAI_DEPLOYMENT}"
 
 echo "==> Writing .env"

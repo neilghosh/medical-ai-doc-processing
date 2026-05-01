@@ -110,5 +110,5 @@ def ingest(path: str) -> dict:
 
 if __name__ == "__main__":
     index_name = os.environ.get("AZURE_SEARCH_INDEX_NAME", "").lower()
-    folder = os.environ["DATA_FOLDER"] if "blob" in index_name else os.environ["SAMPLE_DATA_FOLDER"]
+    folder = os.environ.get("DATA_FOLDER", "sampledata") if "blob" in index_name else os.environ.get("SAMPLE_DATA_FOLDER", "sampledata")
     ingest(folder)
