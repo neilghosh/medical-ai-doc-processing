@@ -197,6 +197,8 @@ and **Threads** (full message + tool-call trace per `thread_id`).
 
 ## 7b. Step 5b — Multi-Agent Workflow (agent-to-agent handoff)
 
+Important : This section is under developement . Switch to the branch [feature/agent-workflow/README.md](https://github.com/neilghosh/medical-ai-doc-processing/blob/feature/agent-workflow/README.md) and run `./install.sh` to get the compatible dependencies.
+
 Goal: show *agents talking to agents* — the output of one agent is the input
 to the next, no human in between. Built with the **Microsoft Agent Framework**
 `WorkflowBuilder` + `@executor` decorators.
